@@ -2,6 +2,7 @@ import React from 'react'
 import { useNavigate } from 'react-router-dom';
 import coverImg from '../assets/cover-bg.png';
 import axios from 'axios';
+import { useEffect, useState } from 'react';
 import { getTest } from '../services/api';
 
 export default function CoverScreen() {
