@@ -5,8 +5,6 @@ import {
   updateCrew,
   deleteCrew
 } from '../services/crewService';
-import DatePicker from 'react-datepicker';
-import 'react-datepicker/dist/react-datepicker.css';
 
 const initialForm = {
   firstName: '',
@@ -279,25 +277,16 @@ export default function CrewDetail() {
 
             {/* Cycle Start */}
             <div className="flex flex-col md:col-span-2">
-              <label className="text-sm font-medium text-gray-700">Cycle Start *</label>
-              <DatePicker
-                selected={form.currentCycleStart ? new Date(form.currentCycleStart) : null}
-                onChange={(date) => {
-                  if (!date) return;
-                  const selected = new Date(date);
-                  const isSaturday = selected.getDay() === 6;
-
-                  if (!isSaturday) {
-                    const daysToAdd = (6 - selected.getDay() + 7) % 7;
-                    selected.setDate(selected.getDate() + daysToAdd);
-                  }
-
-                  const isoDate = selected.toLocaleDateString('en-CA'); // gives yyyy-MM-dd
-                  setForm((f) => ({ ...f, currentCycleStart: isoDate }));
-                }}
-                dateFormat="dd-MM-yyyy"
-                placeholderText="Select a Saturday"
-                className="mt-1 border rounded px-3 py-2 focus:ring w-full"
+              <label className="text-sm font-medium text-gray-700">
+                Cycle Start (ONLY SELECT A SATURDAY!)*
+              </label>
+              <input
+                type="date"
+                value={form.currentCycleStart}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, currentCycleStart: e.target.value }))
+                }
+                className="mt-1 border rounded px-3 py-2 focus:ring"
               />
             </div>
 
