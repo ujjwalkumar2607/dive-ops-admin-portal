@@ -1,3 +1,4 @@
+//copying again
 import React, { useState, useEffect } from 'react';
 import {
   getCrew,
@@ -278,7 +279,7 @@ export default function CrewDetail() {
             {/* Cycle Start */}
             <div className="flex flex-col md:col-span-2">
               <label className="text-sm font-medium text-gray-700">
-                Cycle Start (ONLY SELECT A SATURDAY!)*
+                Cycle Start *
               </label>
               <input
                 type="date"
