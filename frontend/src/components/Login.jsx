@@ -14,7 +14,7 @@ export default function Login() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-        const { data } = await axios.post("/api/login", form);
+        const { data } = await axios.post(`${import.meta.env.VITE_API_URL}/api/login`, form);
         saveAuthToken(data.token);
 
         navigate("/"); // ← go to the cover screen

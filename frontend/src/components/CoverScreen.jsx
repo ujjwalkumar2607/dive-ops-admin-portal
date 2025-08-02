@@ -2,9 +2,17 @@ import React from 'react'
 import { useNavigate } from 'react-router-dom';
 import coverImg from '../assets/cover-bg.png';
 import axios from 'axios';
+import { getTest } from '../services/api';
 
 export default function CoverScreen() {
-  const nav = useNavigate();
+  const [msg, setMsg] = useState('');
+  
+  useEffect(() => {
+    getTest()
+      .then(res => setMsg(res.data.message))
+      .catch(err => console.error(err));},[]);
+  
+      const nav = useNavigate();
   const areas = ['Scheduling', 'Provisions', 'Maintenance', 'Inventory'];
   const logout = () => {
     localStorage.removeItem('token');

@@ -1,5 +1,5 @@
 import axios from 'axios';
-const API_URL = '/api/crew';
+const API_URL = `${import.meta.env.VITE_API_URL}/api/crew`;
 
 export const getCrew = () => axios.get(API_URL).then(r => r.data);
 export const createCrew = crew => axios.post(API_URL, crew).then(r => r.data);
