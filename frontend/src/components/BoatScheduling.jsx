@@ -382,8 +382,9 @@ export default function BoatScheduling() {
             const ds = date.toISOString().slice(0, 10);
             const takenIds = Object.values(slots[ds] || {})
               .flatMap((boatMap) => Object.values(boatMap))
-              .map((slot) => slot.crewId)
+              .map((slot) => String(slot.crewId))
               .filter(Boolean);
+
               const thisSat = startOfWeek(earliestSat, { weekStartsOn: 6 });
               const isPast  = date.getTime() < thisSat.getTime();
             return (
