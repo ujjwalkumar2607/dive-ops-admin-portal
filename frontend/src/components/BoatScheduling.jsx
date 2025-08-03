@@ -5,6 +5,7 @@ import {
   format,
   eachWeekOfInterval,
   startOfWeek,
+  parse,
   addWeeks,
   subWeeks,
 } from "date-fns";
@@ -17,6 +18,28 @@ import "react-datepicker/dist/react-datepicker.css";
 import { differenceInCalendarWeeks, parseISO } from "date-fns";
 // src/components/BoatScheduling.jsx
 import { useAuth } from "../services/useAuth";
+
+  // Helpers to treat "YYYY-MM-DD" (or full ISO) as a local date so we don't get UTC shift surprises
+  function toLocalDate(dateString) {
+    let d;
+    if (dateString.includes("T")) {
+      d = parseISO(dateString);
+    } else {
+      d = parse(dateString, "yyyy-MM-dd", new Date());
+    }
+    // Normalize to local midnight (drop any time component)
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+
+  function getCycleStartSaturday(dateString) {
+    const d = toLocalDate(dateString);
+    const day = d.getDay(); // 6 === Saturday
+    if (day === 6) return d;
+    const daysUntilSaturday = (6 - day + 7) % 7;
+    const sat = new Date(d);
+    sat.setDate(d.getDate() + daysUntilSaturday);
+    return sat;
+  }
 
 export default function BoatScheduling() {
   const [tripDate, setTripDate] = useState(new Date());
@@ -112,23 +135,9 @@ export default function BoatScheduling() {
 
     if (crewId && crew) {
       // calculate their week number (Sat‑to‑Sat)
-      const startDate = parseISO(crew.currentCycleStart);
-      const weekStartDate = parseISO(weekStart);
-      const startDay = startDate.getDay(); // 0=Sun, 6=Sat
-      
-      let cycleStartSaturday;
-      if (startDay === 6) {
-        // If started on Saturday, that's the cycle start
-        cycleStartSaturday = startDate;
-      } else {
-        // If started on another day, cycle starts next Saturday
-        const daysUntilSaturday = (6 - startDay + 7) % 7;
-        cycleStartSaturday = new Date(startDate);
-        cycleStartSaturday.setDate(startDate.getDate() + daysUntilSaturday);
-      }
-      
-      // Calculate weeks from the actual cycle start Saturday
-      const wk = differenceInCalendarWeeks(weekStartDate, cycleStartSaturday, {
+      const startCycleSaturday = getCycleStartSaturday(crew.currentCycleStart);
+      const weekStartDate = toLocalDate(weekStart);
+      const wk = differenceInCalendarWeeks(weekStartDate, startCycleSaturday, {
         weekStartsOn: 6,
       }) + 1;
 
@@ -476,24 +485,9 @@ export default function BoatScheduling() {
                                     })
                                     // 3️⃣ joined by first eligible Saturday?
                                     .filter((c) => {
-                                      const joinDate = new Date(c.currentCycleStart);
-                                      const weekDate = new Date(ds);
-                                      const joinDay = joinDate.getDay(); // 0=Sun, 6=Sat
-                                      
-                                      let firstEligibleSaturday;
-                                      
-                                      if (joinDay === 6) {
-                                        // If joined on Saturday, can start that same Saturday
-                                        firstEligibleSaturday = joinDate;
-                                      } else {
-                                        // If joined on any other day, start next Saturday
-                                        const daysUntilSaturday = (6 - joinDay + 7) % 7;
-                                        firstEligibleSaturday = new Date(joinDate);
-                                        firstEligibleSaturday.setDate(joinDate.getDate() + daysUntilSaturday);
-                                      }
-                                      
-                                      // Check if the current week date is on or after the first eligible Saturday
-                                      return weekDate >= firstEligibleSaturday;
+                                      const firstEligibleSaturday = getCycleStartSaturday(c.currentCycleStart);
+                                      const weekDateLocal = toLocalDate(ds);
+                                      return weekDateLocal >= firstEligibleSaturday;
                                     })
                                     // 4️⃣ not already assigned this week?
                                     .filter(
