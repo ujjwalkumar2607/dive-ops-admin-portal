@@ -1,5 +1,4 @@
 // src/components/BoatScheduling.jsx
-//copying again
 import React, { useState, useEffect } from "react";
 import DatePicker from "react-datepicker";
 import {
@@ -8,7 +7,6 @@ import {
   startOfWeek,
   addWeeks,
   subWeeks,
-  differenceInCalendarWeeks
 } from "date-fns";
 import { jsPDF } from "jspdf";
 import "jspdf-autotable";
@@ -16,6 +14,7 @@ import autoTable from "jspdf-autotable";
 import { getSchedule, saveSchedule } from "../services/scheduleService";
 import { updateCrew, getCrew } from "../services/crewService";
 import "react-datepicker/dist/react-datepicker.css";
+import { differenceInCalendarWeeks, parseISO } from "date-fns";
 // src/components/BoatScheduling.jsx
 import { useAuth } from "../services/useAuth";
 
@@ -114,31 +113,11 @@ export default function BoatScheduling() {
   if (crewId && crew) {
     // calculate their week number
     // calculate their week number (Sat‑to‑Sat)
-    // const startDate     = parseISO(crew.currentCycleStart);
-    // const weekStartDate = parseISO(weekStart);
-    // const wk = differenceInCalendarWeeks(weekStartDate, startDate, {
-    //   weekStartsOn: 6,
-    // }) + 1;
-    const joinDate = new Date(crew.currentCycleStart);
-    const day = joinDate.getDay();            // 0=Sun … 6=Sat
-    const daysToSat = day === 6
-      ? 0
-      : (6 - day + 7) % 7;                          // days until next Saturday
-
-    const adjustedCycleStart = new Date(joinDate);
-    adjustedCycleStart.setDate(joinDate.getDate() + daysToSat);
-
-    // normalize the weekStart (it’s already a Saturday)
-    const adjustedWeekStart = startOfWeek(
-      new Date(weekStart),
-      { weekStartsOn: 6 }
-    );
-
-    const wk = differenceInCalendarWeeks(
-      adjustedWeekStart,
-      adjustedCycleStart,
-      { weekStartsOn: 6 }
-    ) + 1;
+    const startDate     = parseISO(crew.currentCycleStart);
+    const weekStartDate = parseISO(weekStart);
+    const wk = differenceInCalendarWeeks(weekStartDate, startDate, {
+      weekStartsOn: 6,
+    }) + 1;
 
     const maxCycle = crew.cycleLengthWeeks;
 
@@ -483,22 +462,22 @@ export default function BoatScheduling() {
                                       const boatKey = boatKeyMap[boat.id];
                                       return boatKey ? c[boatKey] : true;
                                     })
-                                    // 3️⃣ eligible starting on the Saturday on/after currentCycleStart
-                                      .filter(c => {
-                                        // const joinDate = new Date(c.currentCycleStart);
-                                        // const day = joinDate.getDay();       // 0 = Sun … 6 = Sat
-                                        const joinDate = new Date(c.currentCycleStart);
-                                        const day = joinDate.getDay();            // 0=Sun … 6=Sat
-                                        const daysToSat = day === 6
-                                          ? 0
-                                          : (6 - day + 7) % 7;
-                                      
-
-                                        const firstSat = new Date(joinDate);
-                                        firstSat.setDate(joinDate.getDate() + daysToSat);
-
-                                        return ds >= firstSat.toISOString().slice(0, 10);
-                                      })
+                                    // 3️⃣ joined by first eligible Saturday?
+                                    .filter((c) => {
+                                      const joinDate = new Date(
+                                        c.currentCycleStart
+                                      );
+                                      const day = joinDate.getDay(); // 0=Sun … 6=Sat
+                                      const daysToSat = (6 - day + 7) % 7;
+                                      const firstSat = new Date(joinDate);
+                                      firstSat.setDate(
+                                        joinDate.getDate() + daysToSat
+                                      );
+                                      return (
+                                        ds >=
+                                        firstSat.toISOString().slice(0, 10)
+                                      );
+                                    })
                                     // 4️⃣ not already assigned this week?
                                     .filter(
                                       (c) => !takenIds.includes(String(c._id))
