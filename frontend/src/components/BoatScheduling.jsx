@@ -111,75 +111,127 @@ export default function BoatScheduling() {
     let finalCycleLength = 0;
 
     if (crewId && crew) {
-      // Parse crew's cycle start date properly to avoid timezone issues
-      const cycleStartStr = crew.currentCycleStart;
-      const [year, month, day] = cycleStartStr.split('-').map(Number);
-      const startDate = new Date(year, month - 1, day); // month is 0-indexed
-      const startDay = startDate.getDay(); // 0=Sun, 6=Sat
-      
-      let cycleStartSaturday;
-      if (startDay === 6) {
-        // If started on Saturday, that's the cycle start
-        cycleStartSaturday = cycleStartStr;
-      } else {
-        // If started on another day, cycle starts next Saturday
-        const daysUntilSaturday = (6 - startDay + 7) % 7;
-        const nextSat = new Date(year, month - 1, day + daysUntilSaturday);
-        cycleStartSaturday = nextSat.toISOString().slice(0, 10);
-      }
-      
-      // Parse both dates properly for week calculation
-      const [csYear, csMonth, csDay] = cycleStartSaturday.split('-').map(Number);
-      const [wsYear, wsMonth, wsDay] = weekStart.split('-').map(Number);
-      
-      const cycleStartDate = new Date(csYear, csMonth - 1, csDay);
-      const weekStartDate = new Date(wsYear, wsMonth - 1, wsDay);
-      
-      // Calculate the difference in days and convert to weeks
-      const diffInDays = Math.floor((weekStartDate - cycleStartDate) / (1000 * 60 * 60 * 24));
-      const wk = Math.floor(diffInDays / 7) + 1;
+      try {
+        // Validate currentCycleStart exists and is a string
+        const cycleStartStr = crew.currentCycleStart;
+        if (!cycleStartStr || typeof cycleStartStr !== 'string') {
+          console.warn(`Invalid currentCycleStart for crew ${crew.firstName} ${crew.lastName}:`, cycleStartStr);
+          return; // Exit early
+        }
 
-      const maxCycle = crew.cycleLengthWeeks;
+        // Validate date format (YYYY-MM-DD)
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (!dateRegex.test(cycleStartStr)) {
+          console.warn(`Invalid date format for crew ${crew.firstName} ${crew.lastName}:`, cycleStartStr);
+          return; // Exit early
+        }
 
-      // 👇 figure out if they were scheduled *last* week on *any* boat
-      const prev = new Date(weekStart);
-      prev.setDate(prev.getDate() - 7);
-      const prevKey = prev.toISOString().slice(0,10);
-      const scheduledLastWeek = Object.values(slots[prevKey] || {})
-        .flatMap(b => Object.values(b))
-        .some(s => String(s.crewId) === String(crewId));
-      if (wk > maxCycle && !scheduledLastWeek) {
-        // --- MISSED one week after finishing cycle ⇒ auto reset ---
-        // 1) Persist new cycle start
-        await updateCrew({ ...crew, currentCycleStart: weekStart });
-        // 2) Refresh your local crewList so future clicks use updated start
-        const refreshed = await getCrew();
-        setCrewList(refreshed);
+        // Parse crew's cycle start date properly to avoid timezone issues
+        const [year, month, day] = cycleStartStr.split('-').map(Number);
+        
+        // Validate parsed values
+        if (isNaN(year) || isNaN(month) || isNaN(day)) {
+          console.warn(`Invalid date components for crew ${crew.firstName} ${crew.lastName}:`, { year, month, day });
+          return; // Exit early
+        }
 
-        finalWeek = 1;
-        finalCycleLength = maxCycle;
-      }
-      else if (wk > maxCycle) {
-        window.alert(
-          `⚠️ ${crew.firstName} ${crew.lastName} is over their cycle limit!\n` +
-          `Week: ${wk}, Cycle length: ${maxCycle}`
-        );
-        const doReset = window.confirm(
-          `Reset ${crew.firstName}'s cycle to start on ${weekStart}?`
-        );
-        if (doReset) {
+        const startDate = new Date(year, month - 1, day); // month is 0-indexed
+        
+        // Validate the created date is valid
+        if (isNaN(startDate.getTime())) {
+          console.warn(`Invalid date created for crew ${crew.firstName} ${crew.lastName}:`, startDate);
+          return; // Exit early
+        }
+
+        const startDay = startDate.getDay(); // 0=Sun, 6=Sat
+        
+        let cycleStartSaturday;
+        if (startDay === 6) {
+          // If started on Saturday, that's the cycle start
+          cycleStartSaturday = cycleStartStr;
+        } else {
+          // If started on another day, cycle starts next Saturday
+          const daysUntilSaturday = (6 - startDay + 7) % 7;
+          const nextSat = new Date(year, month - 1, day + daysUntilSaturday);
+          
+          // Validate the calculated date
+          if (isNaN(nextSat.getTime())) {
+            console.warn(`Invalid calculated Saturday for crew ${crew.firstName} ${crew.lastName}:`, nextSat);
+            return; // Exit early
+          }
+          
+          cycleStartSaturday = nextSat.toISOString().slice(0, 10);
+        }
+        
+        // Parse both dates properly for week calculation
+        const [csYear, csMonth, csDay] = cycleStartSaturday.split('-').map(Number);
+        const [wsYear, wsMonth, wsDay] = weekStart.split('-').map(Number);
+        
+        // Validate parsed week start values
+        if (isNaN(wsYear) || isNaN(wsMonth) || isNaN(wsDay)) {
+          console.warn(`Invalid weekStart format:`, weekStart);
+          return; // Exit early
+        }
+        
+        const cycleStartDate = new Date(csYear, csMonth - 1, csDay);
+        const weekStartDate = new Date(wsYear, wsMonth - 1, wsDay);
+        
+        // Validate both dates
+        if (isNaN(cycleStartDate.getTime()) || isNaN(weekStartDate.getTime())) {
+          console.warn(`Invalid dates created:`, { cycleStartDate, weekStartDate });
+          return; // Exit early
+        }
+        
+        // Calculate the difference in days and convert to weeks
+        const diffInDays = Math.floor((weekStartDate - cycleStartDate) / (1000 * 60 * 60 * 24));
+        const wk = Math.floor(diffInDays / 7) + 1;
+
+        const maxCycle = crew.cycleLengthWeeks;
+
+        // 👇 figure out if they were scheduled *last* week on *any* boat
+        const prev = new Date(weekStart);
+        prev.setDate(prev.getDate() - 7);
+        const prevKey = prev.toISOString().slice(0,10);
+        const scheduledLastWeek = Object.values(slots[prevKey] || {})
+          .flatMap(b => Object.values(b))
+          .some(s => String(s.crewId) === String(crewId));
+        if (wk > maxCycle && !scheduledLastWeek) {
+          // --- MISSED one week after finishing cycle ⇒ auto reset ---
+          // 1) Persist new cycle start
           await updateCrew({ ...crew, currentCycleStart: weekStart });
+          // 2) Refresh your local crewList so future clicks use updated start
           const refreshed = await getCrew();
           setCrewList(refreshed);
+
           finalWeek = 1;
           finalCycleLength = maxCycle;
+        }
+        else if (wk > maxCycle) {
+          window.alert(
+            `⚠️ ${crew.firstName} ${crew.lastName} is over their cycle limit!\n` +
+            `Week: ${wk}, Cycle length: ${maxCycle}`
+          );
+          const doReset = window.confirm(
+            `Reset ${crew.firstName}'s cycle to start on ${weekStart}?`
+          );
+          if (doReset) {
+            await updateCrew({ ...crew, currentCycleStart: weekStart });
+            const refreshed = await getCrew();
+            setCrewList(refreshed);
+            finalWeek = 1;
+            finalCycleLength = maxCycle;
+          } else {
+            finalWeek = wk;
+            finalCycleLength = maxCycle;
+          }
         } else {
           finalWeek = wk;
           finalCycleLength = maxCycle;
         }
-      } else {
-        finalWeek = wk;
-        finalCycleLength = maxCycle;
+        
+      } catch (error) {
+        console.error(`Error processing crew selection for ${crew.firstName} ${crew.lastName}:`, error);
+        return; // Exit early on any error
       }
     }
 
@@ -483,26 +535,67 @@ export default function BoatScheduling() {
                                     })
                                     // 3️⃣ joined by first eligible Saturday?
                                     .filter((c) => {
-                                      // Parse the cycle start date string (YYYY-MM-DD format)
-                                      const cycleStartStr = c.currentCycleStart;
-                                      const [year, month, day] = cycleStartStr.split('-').map(Number);
-                                      const joinDate = new Date(year, month - 1, day); // month is 0-indexed
-                                      const joinDay = joinDate.getDay(); // 0=Sun, 6=Sat
-                                      
-                                      let firstEligibleSaturday;
-                                      
-                                      if (joinDay === 6) {
-                                        // If joined on Saturday, can start that same Saturday
-                                        firstEligibleSaturday = cycleStartStr;
-                                      } else {
-                                        // If joined on any other day, calculate next Saturday
-                                        const daysUntilSaturday = (6 - joinDay + 7) % 7;
-                                        const nextSat = new Date(year, month - 1, day + daysUntilSaturday);
-                                        firstEligibleSaturday = nextSat.toISOString().slice(0, 10);
+                                      try {
+                                        // Validate currentCycleStart exists and is a string
+                                        const cycleStartStr = c.currentCycleStart;
+                                        if (!cycleStartStr || typeof cycleStartStr !== 'string') {
+                                          console.warn(`Invalid currentCycleStart for crew ${c.firstName} ${c.lastName}:`, cycleStartStr);
+                                          return false; // Skip this crew member
+                                        }
+
+                                        // Validate date format (YYYY-MM-DD)
+                                        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+                                        if (!dateRegex.test(cycleStartStr)) {
+                                          console.warn(`Invalid date format for crew ${c.firstName} ${c.lastName}:`, cycleStartStr);
+                                          return false;
+                                        }
+
+                                        // Parse the cycle start date string (YYYY-MM-DD format)
+                                        const [year, month, day] = cycleStartStr.split('-').map(Number);
+                                        
+                                        // Validate parsed values
+                                        if (isNaN(year) || isNaN(month) || isNaN(day)) {
+                                          console.warn(`Invalid date components for crew ${c.firstName} ${c.lastName}:`, { year, month, day });
+                                          return false;
+                                        }
+
+                                        // Create date object (month is 0-indexed in JavaScript)
+                                        const joinDate = new Date(year, month - 1, day);
+                                        
+                                        // Validate the created date is valid
+                                        if (isNaN(joinDate.getTime())) {
+                                          console.warn(`Invalid date created for crew ${c.firstName} ${c.lastName}:`, joinDate);
+                                          return false;
+                                        }
+
+                                        const joinDay = joinDate.getDay(); // 0=Sun, 6=Sat
+                                        
+                                        let firstEligibleSaturday;
+                                        
+                                        if (joinDay === 6) {
+                                          // If joined on Saturday, can start that same Saturday
+                                          firstEligibleSaturday = cycleStartStr;
+                                        } else {
+                                          // If joined on any other day, calculate next Saturday
+                                          const daysUntilSaturday = (6 - joinDay + 7) % 7;
+                                          const nextSat = new Date(year, month - 1, day + daysUntilSaturday);
+                                          
+                                          // Validate the calculated date
+                                          if (isNaN(nextSat.getTime())) {
+                                            console.warn(`Invalid calculated Saturday for crew ${c.firstName} ${c.lastName}:`, nextSat);
+                                            return false;
+                                          }
+                                          
+                                          firstEligibleSaturday = nextSat.toISOString().slice(0, 10);
+                                        }
+                                        
+                                        // Compare date strings directly
+                                        return ds >= firstEligibleSaturday;
+                                        
+                                      } catch (error) {
+                                        console.error(`Error processing crew ${c.firstName} ${c.lastName}:`, error);
+                                        return false; // Skip this crew member if any error occurs
                                       }
-                                      
-                                      // Compare date strings directly
-                                      return ds >= firstEligibleSaturday;
                                     })
                                     // 4️⃣ not already assigned this week?
                                     .filter(
