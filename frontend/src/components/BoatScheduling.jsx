@@ -470,28 +470,24 @@ export default function BoatScheduling() {
                                     })
                                     // 3️⃣ eligible starting on the Saturday on/after currentCycleStart
                                     .filter((c) => {
-                                      // Parse a "YYYY-MM-DD" string into a local-midnight Date (avoids UTC shift)
-                                      const parseLocalYMD = (ymd) => {
-                                        if (!ymd) return null;
-                                        const [year, month, day] = ymd.split("-").map(Number);
-                                        return new Date(year, month - 1, day);
-                                      };
-                                      const start = parseLocalYMD(c.currentCycleStart);
-                                      if (!start) return false;
+                                      const start = new Date(c.currentCycleStart);
+                                      let firstEligibleSaturday;
 
-                                      // compute the first eligible Saturday: same day if Saturday, else next Saturday
-                                      let firstEligibleSaturday = new Date(start);
-                                      const dow = start.getDay(); // 0=Sun ... 6=Sat
-                                      if (dow !== 6) {
-                                        const daysToAdd = (6 - dow + 7) % 7;
+                                      if (start.getDay() === 6) {
+                                        // already Saturday: allow that same week
+                                        firstEligibleSaturday = startOfWeek(start, { weekStartsOn: 6 });
+                                      } else {
+                                        // move forward to the next Saturday
+                                        const daysToAdd = (6 - start.getDay() + 7) % 7;
+                                        firstEligibleSaturday = new Date(start);
                                         firstEligibleSaturday.setDate(start.getDate() + daysToAdd);
                                       }
 
-                                      // Normalize panel week and eligibility to their Saturday boundaries
-                                      const panelSaturday = startOfWeek(parseLocalYMD(ds), { weekStartsOn: 6 });
-                                      const eligibleSaturday = startOfWeek(firstEligibleSaturday, { weekStartsOn: 6 });
+                                      // Normalize both to the week-start Saturday to compare
+                                      const panelWeek = startOfWeek(new Date(ds), { weekStartsOn: 6 });
+                                      const eligibleWeek = startOfWeek(firstEligibleSaturday, { weekStartsOn: 6 });
 
-                                      return panelSaturday.getTime() >= eligibleSaturday.getTime();
+                                      return panelWeek.getTime() >= eligibleWeek.getTime();
                                     })
                                     // 4️⃣ not already assigned this week?
                                     .filter(
