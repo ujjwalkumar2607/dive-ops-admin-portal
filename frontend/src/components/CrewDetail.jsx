@@ -129,15 +129,22 @@ export default function CrewDetail() {
     setShowForm(true);
   };
 
-  // Delete
-  const handleDelete = async id => {
-    try {
-      await deleteCrew(id);
-      setList(list.filter(c => c._id !== id));
-    } catch (err) {
-      console.error('Delete error:', err);
-    }
-  };
+  // Delete with confirmation
+    const handleDelete = async (id, name) => {
+      const confirmed = window.confirm(
+        `Are you sure you want to delete ${name}? This action cannot be undone.`
+      );
+      if (!confirmed) return;
+
+      try {
+        await deleteCrew(id);
+        setList((l) => l.filter((c) => c._id !== id));
+        // if the expanded one was showing, collapse it
+        if (expandedId === id) setExpandedId(null);
+      } catch (err) {
+        console.error('Delete error:', err);
+      }
+    };
 
   return (
     <div className="max-w-3xl mx-auto bg-white p-6 rounded-lg shadow">
@@ -544,11 +551,11 @@ export default function CrewDetail() {
                       Edit
                     </button>
                     <button
-                      onClick={() => handleDelete(c._id)}
-                      className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded"
-                    >
-                      Delete
-                    </button>
+                    onClick={() => handleDelete(c._id, `${c.firstName} ${c.lastName}`)}
+                    className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded"
+                  >
+                    Delete
+                  </button>
                   </div>
                 </div>
               );
