@@ -112,9 +112,23 @@ export default function BoatScheduling() {
 
     if (crewId && crew) {
       // calculate their week number (Sat‑to‑Sat)
-      const startDate     = parseISO(crew.currentCycleStart);
+      const startDate = parseISO(crew.currentCycleStart);
       const weekStartDate = parseISO(weekStart);
-      const wk = differenceInCalendarWeeks(weekStartDate, startDate, {
+      const startDay = startDate.getDay(); // 0=Sun, 6=Sat
+      
+      let cycleStartSaturday;
+      if (startDay === 6) {
+        // If started on Saturday, that's the cycle start
+        cycleStartSaturday = startDate;
+      } else {
+        // If started on another day, cycle starts next Saturday
+        const daysUntilSaturday = (6 - startDay + 7) % 7;
+        cycleStartSaturday = new Date(startDate);
+        cycleStartSaturday.setDate(startDate.getDate() + daysUntilSaturday);
+      }
+      
+      // Calculate weeks from the actual cycle start Saturday
+      const wk = differenceInCalendarWeeks(weekStartDate, cycleStartSaturday, {
         weekStartsOn: 6,
       }) + 1;
 
@@ -464,12 +478,22 @@ export default function BoatScheduling() {
                                     .filter((c) => {
                                       const joinDate = new Date(c.currentCycleStart);
                                       const weekDate = new Date(ds);
+                                      const joinDay = joinDate.getDay(); // 0=Sun, 6=Sat
                                       
-                                      // Get the Saturday of the join week (week starts on Saturday)
-                                      const joinWeekSaturday = startOfWeek(joinDate, { weekStartsOn: 6 });
+                                      let firstEligibleSaturday;
                                       
-                                      // Check if the current week's Saturday is on or after the join week's Saturday
-                                      return weekDate >= joinWeekSaturday;
+                                      if (joinDay === 6) {
+                                        // If joined on Saturday, can start that same Saturday
+                                        firstEligibleSaturday = joinDate;
+                                      } else {
+                                        // If joined on any other day, start next Saturday
+                                        const daysUntilSaturday = (6 - joinDay + 7) % 7;
+                                        firstEligibleSaturday = new Date(joinDate);
+                                        firstEligibleSaturday.setDate(joinDate.getDate() + daysUntilSaturday);
+                                      }
+                                      
+                                      // Check if the current week date is on or after the first eligible Saturday
+                                      return weekDate >= firstEligibleSaturday;
                                     })
                                     // 4️⃣ not already assigned this week?
                                     .filter(
