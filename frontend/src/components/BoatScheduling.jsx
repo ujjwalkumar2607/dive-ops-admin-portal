@@ -7,47 +7,20 @@ import {
   startOfWeek,
   addWeeks,
   subWeeks,
-  differenceInCalendarWeeks,
-  parseISO,
-   // ✨ MODIFIED: Use UTC-safe method
-  addDays,   // ✨ NEW: For easier date math
 } from "date-fns";
 import { jsPDF } from "jspdf";
-
 import "jspdf-autotable";
 import autoTable from "jspdf-autotable";
 import { getSchedule, saveSchedule } from "../services/scheduleService";
 import { updateCrew, getCrew } from "../services/crewService";
 import "react-datepicker/dist/react-datepicker.css";
+import { differenceInCalendarWeeks, parseISO } from "date-fns";
+// src/components/BoatScheduling.jsx
 import { useAuth } from "../services/useAuth";
-
-// ✨ NEW: Centralized helper function to get the true start of a cycle
-const getEffectiveCycleStart = (crewMember) => {
-  if (!crewMember?.currentCycleStart) {
-    // Return a date far in the future if no start date is set
-    return new Date('9999-12-31T12:00:00Z');
-  }
-  
-  // Use parseISO to correctly interpret the UTC date string
-  const startDate = parseISO(crewMember.currentCycleStart);
-
-  // Use getUTCDay() to avoid timezone issues. 0=Sun, 6=Sat.
-  const startDay = startDate.getUTCDate();
-
-  if (startDay === 6) {
-    // If they started on a Saturday, that's the effective start
-    return startDate;
-  } else {
-    // Otherwise, their cycle effectively starts on the *following* Saturday
-    const daysUntilSaturday = (6 - startDay + 7) % 7;
-    return addDays(startDate, daysUntilSaturday);
-  }
-};
-
 
 export default function BoatScheduling() {
   const [tripDate, setTripDate] = useState(new Date());
-  const earliestSat = startOfWeek(new Date(), { weekStartsOn: 6 });
+  const earliestSat = startOfWeek(new Date(), { weekStartsOn: 6 });;
   const [slots, setSlots] = useState({});
   const [crewList, setCrewList] = useState([]);
   const [editing, setEditing] = useState(false);
@@ -62,33 +35,55 @@ export default function BoatScheduling() {
     {
       id: "catPpalu",
       name: "Cat Ppalu",
-      positions: ["CAPT", "1st MATE", "ENGINEER", "CHEF", "DIVEMASTER", "EXTRA"],
+      positions: [
+        "CAPT",
+        "1st MATE",
+        "ENGINEER",
+        "CHEF",
+        "DIVEMASTER",
+        "EXTRA",
+      ],
     },
     {
       id: "morningStar",
       name: "Morning Star",
-      positions: ["CAPT", "1st MATE", "ENGINEER", "CHEF", "DIVEMASTER", "EXTRA"],
+      positions: [
+        "CAPT",
+        "1st MATE",
+        "ENGINEER",
+        "CHEF",
+        "DIVEMASTER",
+        "EXTRA",
+      ],
     },
     {
       id: "seaExplorer",
       name: "Sea Explorer",
-      positions: ["CAPT", "1st MATE", "ENGINEER", "CHEF", "DIVEMASTER", "EXTRA"],
+      positions: [
+        "CAPT",
+        "1st MATE",
+        "ENGINEER",
+        "CHEF",
+        "DIVEMASTER",
+        "EXTRA",
+      ],
     },
   ];
 
   const positionKeyMap = {
-    CAPT: "positionsTrainedCaptain",
-    "1st MATE": "positionsTrained1stMate",
-    ENGINEER: "positionsTrainedEngineer",
-    CHEF: "positionsTrainedChef",
-    DIVEMASTER: "positionsTrainedDeckhand",
-    EXTRA: null,
+    CAPT:        'positionsTrainedCaptain',
+    '1st MATE':  'positionsTrained1stMate',
+    ENGINEER:    'positionsTrainedEngineer',
+    CHEF:        'positionsTrainedChef',
+    DIVEMASTER:  'positionsTrainedDeckhand',
+    EXTRA:       null, // everyone is "trained" for Extra
   };
   
+  // maps your boat.id → the crew boolean prop
   const boatKeyMap = {
-    catPpalu: "boatsTrainedCatPpalu",
-    morningStar: "boatsTrainedMorningStar",
-    seaExplorer: "boatsTrainedSeaExplorer",
+    catPpalu:     'boatsTrainedCatPpalu',
+    morningStar:  'boatsTrainedMorningStar',
+    seaExplorer:  'boatsTrainedSeaExplorer',
   };
 
   const thisSat = startOfWeek(tripDate, { weekStartsOn: 6 });
@@ -102,25 +97,36 @@ export default function BoatScheduling() {
   useEffect(() => {
     [prevSat, thisSat, nextSat].forEach((d) => {
       const ds = d.toISOString().slice(0, 10);
-      if (!slots[ds]) { // Fetch only if not already loaded
-        getSchedule(ds)
-          .then((data) => setSlots((s) => ({ ...s, [ds]: data })))
-          .catch(console.error);
-      }
+      getSchedule(ds)
+        .then((data) => setSlots((s) => ({ ...s, [ds]: data })))
+        .catch(console.error);
     });
-  }, [tripDate, slots]);
+  }, [tripDate]);
 
   const handleSelect = async (boatId, position, weekStart, crewId) => {
+    // find the crew record
     const crew = crewList.find((c) => String(c._id) === String(crewId));
 
     let finalWeek = 0;
     let finalCycleLength = 0;
 
     if (crewId && crew) {
-      // ✨ MODIFIED: Use the new centralized helper function
-      const cycleStartSaturday = getEffectiveCycleStart(crew);
-      const weekStartDate = parseISO(weekStart); // Use parseISO for consistency
-
+      // calculate their week number (Sat‑to‑Sat)
+      const startDate = parseISO(crew.currentCycleStart);
+      const weekStartDate = parseISO(weekStart);
+      const startDay = startDate.getDay(); // 0=Sun, 6=Sat
+      
+      let cycleStartSaturday;
+      if (startDay === 6) {
+        // If started on Saturday, that's the cycle start
+        cycleStartSaturday = startDate;
+      } else {
+        // If started on another day, cycle starts next Saturday
+        const daysUntilSaturday = (6 - startDay + 7) % 7;
+        cycleStartSaturday = new Date(startDate);
+        cycleStartSaturday.setDate(startDate.getDate() + daysUntilSaturday);
+      }
+      
       // Calculate weeks from the actual cycle start Saturday
       const wk = differenceInCalendarWeeks(weekStartDate, cycleStartSaturday, {
         weekStartsOn: 6,
@@ -129,16 +135,20 @@ export default function BoatScheduling() {
       const maxCycle = crew.cycleLengthWeeks;
 
       // 👇 figure out if they were scheduled *last* week on *any* boat
-      const prev = subWeeks(weekStartDate, 1);
+      const prev = new Date(weekStart);
+      prev.setDate(prev.getDate() - 7);
       const prevKey = prev.toISOString().slice(0,10);
       const scheduledLastWeek = Object.values(slots[prevKey] || {})
         .flatMap(b => Object.values(b))
         .some(s => String(s.crewId) === String(crewId));
-        
       if (wk > maxCycle && !scheduledLastWeek) {
+        // --- MISSED one week after finishing cycle ⇒ auto reset ---
+        // 1) Persist new cycle start
         await updateCrew({ ...crew, currentCycleStart: weekStart });
+        // 2) Refresh your local crewList so future clicks use updated start
         const refreshed = await getCrew();
         setCrewList(refreshed);
+
         finalWeek = 1;
         finalCycleLength = maxCycle;
       }
@@ -168,7 +178,7 @@ export default function BoatScheduling() {
 
     setSlots(prev => {
       const weeks = { ...prev };
-      weeks[weekStart]       = { ...(weeks[weekStart] || {}) };
+      weeks[weekStart]         = { ...(weeks[weekStart] || {}) };
       weeks[weekStart][boatId] = { ...(weeks[weekStart][boatId] || {}) };
 
       if (!crewId) {
@@ -186,31 +196,19 @@ export default function BoatScheduling() {
           cycleCount:  `${finalWeek}/${finalCycleLength}`
         };
       }
+
       return weeks;
     });
   };
 
-  const handleResetCycle =async (boatId, position, weekStart) => {
-    // This function seems fine, no changes needed unless you want to persist the reset immediately.
-    const cell = slots[weekStart]?.[boatId]?.[position];
-    if (!cell || !cell.crewId) return;
-
-    // Find the crew member
-    const crew = crewList.find((c) => String(c._id) === String(cell.crewId));
-    if (!crew) return;
-
-    // Update the crew member's cycle start date
-    await updateCrew({ ...crew, currentCycleStart: weekStart });
-    
-    // Refresh crew list
-    const refreshed = await getCrew();
-    setCrewList(refreshed);
+  const handleResetCycle = (boatId, position, weekStart) => {
     setSlots((prev) => {
       const weeks = { ...prev };
       const cell = { ...weeks[weekStart][boatId][position] };
+      // reset their cycle: start at this week => week becomes 1
       cell.week = 1;
-      cell.overByOne = false; 
-      cell.cycleCount = `1/${cell.cycleLength}`; // ✨ MODIFIED: Update cycleCount as well
+      cell.overByOne = false;
+      // you could also call your crewService.updateCrew here
       weeks[weekStart][boatId][position] = cell;
       return weeks;
     });
@@ -221,7 +219,6 @@ export default function BoatScheduling() {
       saveSchedule(date, sl).catch(console.error)
     );
     alert("Saved!");
-    setEditing(false);
   };
 
   const panels = [
@@ -306,6 +303,7 @@ export default function BoatScheduling() {
   return (
     <div className="w-full max-w-screen-xl mx-auto p-4 space-y-6 flex flex-col items-center">
       
+
       {/* Date picker & Save */}
       <div className="flex items-center justify-center space-x-4 w-full">
         <label className="block text-m font-medium">Viewing Week Of :</label>
@@ -316,7 +314,7 @@ export default function BoatScheduling() {
         />
         {editing && (
           <button
-            onClick={saveAll}
+            onClick={() => { saveAll(); setEditing(false); }}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded"
           >
             Save Schedule
@@ -366,7 +364,7 @@ export default function BoatScheduling() {
           onClick={() => setTripDate((d) => subWeeks(d, 1))}
           className="absolute left-0 top-1/2 transform -translate-x-full -translate-y-1/2 text-4xl text-gray-600 hover:text-gray-800 z-10"
         >
-          ◀️
+          ◀
         </button>
 
         {/* Week panels */}
@@ -377,21 +375,20 @@ export default function BoatScheduling() {
               .flatMap((boatMap) => Object.values(boatMap))
               .map((slot) => slot.crewId)
               .filter(Boolean);
-            
-            const isPast  = date.getTime() < startOfWeek(new Date(), { weekStartsOn: 6 }).getTime();
-
+              const thisSat = startOfWeek(earliestSat, { weekStartsOn: 6 });
+              const isPast  = date.getTime() < thisSat.getTime();
             return (
               <div
                 key={ds}
                 className="flex-shrink-0 w-96 bg-gray-100 p-4 rounded shadow"
               >
                 {role === 'manager' && !isPast && (
-                  <button
-                    onClick={() => setEditing((e) => !e)}
-                    className="absolute top-1 right-8 px-4 py-2 bg-blue-600  text-white rounded hover:bg-blue-500 text-m"
-                  >
-                    {editing ? "Cancel" : "Edit Schedule"}
-                  </button>
+                <button
+                  onClick={() => setEditing((e) => !e)}
+                  className="absolute top-1 right-8 px-4 py-2 bg-blue-600  text-white rounded hover:bg-blue-500 text-m"
+                >
+                  {editing ? "Cancel" : "Edit Schedule"}
+                </button>
                 )}
 
                 <h3 className="font-semibold mb-1">{label} Week</h3>
@@ -409,7 +406,11 @@ export default function BoatScheduling() {
                       <div className="font-semibold">CYCLE</div>
                       {boat.positions.map((pos) => {
                         const cell = slots[ds]?.[boat.id]?.[pos] || {};
-                        const isOver = cell.cycleLength > 0 && cell.week > cell.cycleLength;
+
+                        const week = cell.week || 0;
+                        const cycle = cell.cycleLength || 0;
+                        const isOver =
+                          cell.cycleLength > 0 && cell.week > cell.cycleLength;
                         const cycleText = cell.cycleCount || "";
 
                         return (
@@ -417,23 +418,26 @@ export default function BoatScheduling() {
                             {/* POSITION */}
                             <div>{pos}</div>
 
-                            {/* CREW */}
+                            {/* CREW: if assigned, show clickable name; otherwise show dropdown */}
                             <div>
                               {cell.crewId ? (
                                 <button
                                   disabled={!editing || isPast}
                                   onClick={() => {
+                                    // bail out if not editing or in a past week
                                     if (!editing || isPast) return;
-                                    if (isOver) {
+
+                                    if (cell.overByOne) {
                                       const ok = window.confirm(
-                                        `⚠️ ${cell.name} is over their cycle.\n\n` +
+                                        `⚠️ ${cell.name} is more than one week over their cycle.\n\n` +
                                           `Current: ${cell.week}/${cell.cycleLength}\n\n` +
                                           `Reset their cycle to start here?`
                                       );
                                       if (ok)
                                         handleResetCycle(boat.id, pos, ds);
                                     } else {
-                                    handleSelect(boat.id, pos, ds, "");}
+                                      handleSelect(boat.id, pos, ds, "");
+                                    }
                                   }}
                                   className={
                                     !editing || isPast
@@ -448,7 +452,12 @@ export default function BoatScheduling() {
                                   value={cell.crewId || ""}
                                   onChange={(e) => {
                                     if (!editing || isPast) return;
-                                    handleSelect(boat.id, pos, ds, e.target.value);
+                                    handleSelect(
+                                      boat.id,
+                                      pos,
+                                      ds,
+                                      e.target.value
+                                    );
                                   }}
                                   disabled={!editing || isPast}
                                   className="w-full border rounded px-1 py-0.5 disabled:opacity-50"
@@ -465,18 +474,32 @@ export default function BoatScheduling() {
                                       const boatKey = boatKeyMap[boat.id];
                                       return boatKey ? c[boatKey] : true;
                                     })
-                                    // ✨ MODIFIED: 3️⃣ Simplified and corrected eligibility check
+                                    // 3️⃣ joined by first eligible Saturday?
                                     .filter((c) => {
-                                      const weekStartDate = parseISO(ds);
-                                      const firstEligibleSaturday = getEffectiveCycleStart(c);
-                                      // Crew is eligible if the week we are viewing is on or after their effective start date
-                                      return weekStartDate.getTime() >= firstEligibleSaturday.getTime();
+                                      const joinDate = new Date(c.currentCycleStart);
+                                      const weekDate = new Date(ds);
+                                      const joinDay = joinDate.getDay(); // 0=Sun, 6=Sat
+                                      
+                                      let firstEligibleSaturday;
+                                      
+                                      if (joinDay === 6) {
+                                        // If joined on Saturday, can start that same Saturday
+                                        firstEligibleSaturday = joinDate;
+                                      } else {
+                                        // If joined on any other day, start next Saturday
+                                        const daysUntilSaturday = (6 - joinDay + 7) % 7;
+                                        firstEligibleSaturday = new Date(joinDate);
+                                        firstEligibleSaturday.setDate(joinDate.getDate() + daysUntilSaturday);
+                                      }
+                                      
+                                      // Check if the current week date is on or after the first eligible Saturday
+                                      return weekDate >= firstEligibleSaturday;
                                     })
                                     // 4️⃣ not already assigned this week?
                                     .filter(
                                       (c) => !takenIds.includes(String(c._id))
                                     )
-                                    // 5️⃣ render each remaining crew
+                                    // 5️⃣ render each remaining crew as an option
                                     .map((c) => {
                                       const label = c.preferredName?.trim()
                                         ? c.preferredName
@@ -492,17 +515,16 @@ export default function BoatScheduling() {
                             </div>
 
                             {/* CYCLE DISPLAY */}
-                            <div className={isOver ? "text-red-600 font-bold" : ""}>
+                            <div className={isOver ? "text-red-600" : ""}>
                               {cycleText}
                             </div>
-                            
                             {cell.overByOne && (
                               <button
                                 onClick={() => {
                                   const ok = window.confirm(
                                     `⚠️ ${cell.name} is more than one week over their cycle.\n\n` +
-                                    `Current: ${cell.week}/${cell.cycleLength}\n\n` +
-                                    `Would you like to reset their cycle here?`
+                                      `Current: ${cell.week}/${cell.cycleLength}\n\n` +
+                                      `Would you like to reset their cycle here?`
                                   );
                                   if (ok) handleResetCycle(boat.id, pos, ds);
                                 }}
@@ -527,7 +549,7 @@ export default function BoatScheduling() {
           onClick={() => setTripDate((d) => addWeeks(d, 1))}
           className="absolute right-0 top-1/2 transform translate-x-full -translate-y-1/2 text-4xl text-gray-600 hover:text-gray-800 z-10"
         >
-          ▶️
+          ▶
         </button>
       </div>
     </div>
