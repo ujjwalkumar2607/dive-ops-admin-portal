@@ -13,7 +13,7 @@ import {
   addDays,   // ✨ NEW: For easier date math
 } from "date-fns";
 import { jsPDF } from "jspdf";
-import getUTCDay from 'date-fns/getUTCDay';
+
 import "jspdf-autotable";
 import autoTable from "jspdf-autotable";
 import { getSchedule, saveSchedule } from "../services/scheduleService";
@@ -32,7 +32,7 @@ const getEffectiveCycleStart = (crewMember) => {
   const startDate = parseISO(crewMember.currentCycleStart);
 
   // Use getUTCDay() to avoid timezone issues. 0=Sun, 6=Sat.
-  const startDay = getUTCDay(startDate);
+  const startDay = startDate.getUTCDate();
 
   if (startDay === 6) {
     // If they started on a Saturday, that's the effective start
