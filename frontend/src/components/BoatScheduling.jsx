@@ -9,7 +9,7 @@ import {
   subWeeks,
   differenceInCalendarWeeks,
   parseISO,
-  getUTCDay, // ✨ MODIFIED: Use UTC-safe method
+   // ✨ MODIFIED: Use UTC-safe method
   addDays,   // ✨ NEW: For easier date math
 } from "date-fns";
 import { jsPDF } from "jspdf";
