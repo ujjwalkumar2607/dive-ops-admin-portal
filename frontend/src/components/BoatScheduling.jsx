@@ -487,7 +487,7 @@ export default function BoatScheduling() {
                                       .filter(c => {
                                         // const joinDate = new Date(c.currentCycleStart);
                                         // const day = joinDate.getDay();       // 0 = Sun … 6 = Sat
-                                        const joinDate = new Date(crew.currentCycleStart);
+                                        const joinDate = new Date(c.currentCycleStart);
                                         const day = joinDate.getDay();            // 0=Sun … 6=Sat
                                         const daysToSat = day === 6
                                           ? 0
