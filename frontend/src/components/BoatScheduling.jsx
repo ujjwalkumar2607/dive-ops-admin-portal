@@ -76,7 +76,7 @@ export default function BoatScheduling() {
     ENGINEER:    'positionsTrainedEngineer',
     CHEF:        'positionsTrainedChef',
     DIVEMASTER:  'positionsTrainedDeckhand',
-    EXTRA:       null, // everyone is “trained” for Extra
+    EXTRA:       null, // everyone is "trained" for Extra
   };
   
   // maps your boat.id → the crew boolean prop
@@ -104,90 +104,88 @@ export default function BoatScheduling() {
   }, [tripDate]);
 
   const handleSelect = async (boatId, position, weekStart, crewId) => {
-  // find the crew record
-  const crew = crewList.find((c) => String(c._id) === String(crewId));
+    // find the crew record
+    const crew = crewList.find((c) => String(c._id) === String(crewId));
 
-  let finalWeek = 0;
-  let finalCycleLength = 0;
+    let finalWeek = 0;
+    let finalCycleLength = 0;
 
-  if (crewId && crew) {
-    // calculate their week number
-    // calculate their week number (Sat‑to‑Sat)
-    const startDate     = parseISO(crew.currentCycleStart);
-    const weekStartDate = parseISO(weekStart);
-    const wk = differenceInCalendarWeeks(weekStartDate, startDate, {
-      weekStartsOn: 6,
-    }) + 1;
+    if (crewId && crew) {
+      // calculate their week number (Sat‑to‑Sat)
+      const startDate     = parseISO(crew.currentCycleStart);
+      const weekStartDate = parseISO(weekStart);
+      const wk = differenceInCalendarWeeks(weekStartDate, startDate, {
+        weekStartsOn: 6,
+      }) + 1;
 
-    const maxCycle = crew.cycleLengthWeeks;
+      const maxCycle = crew.cycleLengthWeeks;
 
-    // 👇 figure out if they were scheduled *last* week on *any* boat
-    const prev = new Date(weekStart);
-    prev.setDate(prev.getDate() - 7);
-    const prevKey = prev.toISOString().slice(0,10);
-    const scheduledLastWeek = Object.values(slots[prevKey] || {})
-      .flatMap(b => Object.values(b))
-      .some(s => String(s.crewId) === String(crewId));
-    if (wk > maxCycle && !scheduledLastWeek) {
-      // --- MISSED one week after finishing cycle ⇒ auto reset ---
-      // 1) Persist new cycle start
-      await updateCrew({ ...crew, currentCycleStart: weekStart });
-      // 2) Refresh your local crewList so future clicks use updated start
-      const refreshed = await getCrew();
-      setCrewList(refreshed);
-
-      finalWeek = 1;
-      finalCycleLength = maxCycle;
-    }
-    else if (wk > maxCycle) {
-      window.alert(
-        `⚠️ ${crew.firstName} ${crew.lastName} is over their cycle limit!\n` +
-        `Week: ${wk}, Cycle length: ${maxCycle}`
-      );
-      const doReset = window.confirm(
-        `Reset ${crew.firstName}'s cycle to start on ${weekStart}?`
-      );
-      if (doReset) {
+      // 👇 figure out if they were scheduled *last* week on *any* boat
+      const prev = new Date(weekStart);
+      prev.setDate(prev.getDate() - 7);
+      const prevKey = prev.toISOString().slice(0,10);
+      const scheduledLastWeek = Object.values(slots[prevKey] || {})
+        .flatMap(b => Object.values(b))
+        .some(s => String(s.crewId) === String(crewId));
+      if (wk > maxCycle && !scheduledLastWeek) {
+        // --- MISSED one week after finishing cycle ⇒ auto reset ---
+        // 1) Persist new cycle start
         await updateCrew({ ...crew, currentCycleStart: weekStart });
+        // 2) Refresh your local crewList so future clicks use updated start
         const refreshed = await getCrew();
         setCrewList(refreshed);
+
         finalWeek = 1;
         finalCycleLength = maxCycle;
+      }
+      else if (wk > maxCycle) {
+        window.alert(
+          `⚠️ ${crew.firstName} ${crew.lastName} is over their cycle limit!\n` +
+          `Week: ${wk}, Cycle length: ${maxCycle}`
+        );
+        const doReset = window.confirm(
+          `Reset ${crew.firstName}'s cycle to start on ${weekStart}?`
+        );
+        if (doReset) {
+          await updateCrew({ ...crew, currentCycleStart: weekStart });
+          const refreshed = await getCrew();
+          setCrewList(refreshed);
+          finalWeek = 1;
+          finalCycleLength = maxCycle;
+        } else {
+          finalWeek = wk;
+          finalCycleLength = maxCycle;
+        }
       } else {
         finalWeek = wk;
         finalCycleLength = maxCycle;
       }
-    } else {
-      finalWeek = wk;
-      finalCycleLength = maxCycle;
-    }
-  }
-
-  setSlots(prev => {
-    const weeks = { ...prev };
-    weeks[weekStart]         = { ...(weeks[weekStart] || {}) };
-    weeks[weekStart][boatId] = { ...(weeks[weekStart][boatId] || {}) };
-
-    if (!crewId) {
-      delete weeks[weekStart][boatId][position];
-    } else {
-      const displayName = crew.preferredName?.trim()
-        ? crew.preferredName
-        : `${crew.firstName} ${crew.lastName}`;
-
-      weeks[weekStart][boatId][position] = {
-        crewId,
-        name:        displayName,
-        week:        finalWeek,
-        cycleLength: finalCycleLength,
-        cycleCount:  `${finalWeek}/${finalCycleLength}`
-      };
     }
 
-    return weeks;
-  });
-};
+    setSlots(prev => {
+      const weeks = { ...prev };
+      weeks[weekStart]         = { ...(weeks[weekStart] || {}) };
+      weeks[weekStart][boatId] = { ...(weeks[weekStart][boatId] || {}) };
 
+      if (!crewId) {
+        delete weeks[weekStart][boatId][position];
+      } else {
+        const displayName = crew.preferredName?.trim()
+          ? crew.preferredName
+          : `${crew.firstName} ${crew.lastName}`;
+
+        weeks[weekStart][boatId][position] = {
+          crewId,
+          name:        displayName,
+          week:        finalWeek,
+          cycleLength: finalCycleLength,
+          cycleCount:  `${finalWeek}/${finalCycleLength}`
+        };
+      }
+
+      return weeks;
+    });
+  };
 
   const handleResetCycle = (boatId, position, weekStart) => {
     setSlots((prev) => {
@@ -464,19 +462,14 @@ export default function BoatScheduling() {
                                     })
                                     // 3️⃣ joined by first eligible Saturday?
                                     .filter((c) => {
-                                      const joinDate = new Date(
-                                        c.currentCycleStart
-                                      );
-                                      const day = joinDate.getDay(); // 0=Sun … 6=Sat
-                                      const daysToSat = (6 - day + 7) % 7;
-                                      const firstSat = new Date(joinDate);
-                                      firstSat.setDate(
-                                        joinDate.getDate() + daysToSat
-                                      );
-                                      return (
-                                        ds >=
-                                        firstSat.toISOString().slice(0, 10)
-                                      );
+                                      const joinDate = new Date(c.currentCycleStart);
+                                      const weekDate = new Date(ds);
+                                      
+                                      // Get the Saturday of the join week (week starts on Saturday)
+                                      const joinWeekSaturday = startOfWeek(joinDate, { weekStartsOn: 6 });
+                                      
+                                      // Check if the current week's Saturday is on or after the join week's Saturday
+                                      return weekDate >= joinWeekSaturday;
                                     })
                                     // 4️⃣ not already assigned this week?
                                     .filter(
