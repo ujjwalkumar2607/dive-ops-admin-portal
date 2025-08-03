@@ -13,6 +13,7 @@ import {
   addDays,   // ✨ NEW: For easier date math
 } from "date-fns";
 import { jsPDF } from "jspdf";
+import getUTCDay from 'date-fns/getUTCDay';
 import "jspdf-autotable";
 import autoTable from "jspdf-autotable";
 import { getSchedule, saveSchedule } from "../services/scheduleService";
