@@ -8,6 +8,7 @@ import {
   startOfWeek,
   addWeeks,
   subWeeks,
+  differenceInCalendarWeeks
 } from "date-fns";
 import { jsPDF } from "jspdf";
 import "jspdf-autotable";
@@ -15,7 +16,6 @@ import autoTable from "jspdf-autotable";
 import { getSchedule, saveSchedule } from "../services/scheduleService";
 import { updateCrew, getCrew } from "../services/crewService";
 import "react-datepicker/dist/react-datepicker.css";
-import { differenceInCalendarWeeks, parseISO, startOfWeek } from "date-fns";
 // src/components/BoatScheduling.jsx
 import { useAuth } from "../services/useAuth";
 
