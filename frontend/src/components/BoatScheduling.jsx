@@ -469,26 +469,19 @@ export default function BoatScheduling() {
                                       return boatKey ? c[boatKey] : true;
                                     })
                                     // 3️⃣ eligible starting on the Saturday on/after currentCycleStart
-                                    .filter((c) => {
-                                      const start = new Date(c.currentCycleStart);
-                                      let firstEligibleSaturday;
+                                      .filter(c => {
+                                        const joinDate = new Date(c.currentCycleStart);
+                                        const day = joinDate.getDay();       // 0 = Sun … 6 = Sat
 
-                                      if (start.getDay() === 6) {
-                                        // already Saturday: allow that same week
-                                        firstEligibleSaturday = startOfWeek(start, { weekStartsOn: 6 });
-                                      } else {
-                                        // move forward to the next Saturday
-                                        const daysToAdd = (6 - start.getDay() + 7) % 7;
-                                        firstEligibleSaturday = new Date(start);
-                                        firstEligibleSaturday.setDate(start.getDate() + daysToAdd);
-                                      }
+                                        const daysToSat = (day === 6)
+                                          ? 0
+                                          : (6 - day + 7) % 7;
 
-                                      // Normalize both to the week-start Saturday to compare
-                                      const panelWeek = startOfWeek(new Date(ds), { weekStartsOn: 6 });
-                                      const eligibleWeek = startOfWeek(firstEligibleSaturday, { weekStartsOn: 6 });
+                                        const firstSat = new Date(joinDate);
+                                        firstSat.setDate(joinDate.getDate() + daysToSat);
 
-                                      return panelWeek.getTime() >= eligibleWeek.getTime();
-                                    })
+                                        return ds >= firstSat.toISOString().slice(0, 10);
+                                      })
                                     // 4️⃣ not already assigned this week?
                                     .filter(
                                       (c) => !takenIds.includes(String(c._id))
