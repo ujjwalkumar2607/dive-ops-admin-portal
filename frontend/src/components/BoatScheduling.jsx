@@ -119,11 +119,26 @@ export default function BoatScheduling() {
     // const wk = differenceInCalendarWeeks(weekStartDate, startDate, {
     //   weekStartsOn: 6,
     // }) + 1;
-    const adjustedCycleStart = startOfWeek(new Date(crew.currentCycleStart), { weekStartsOn: 6 });
-    const adjustedWeekStart = startOfWeek(new Date(weekStart), { weekStartsOn: 6 });
+    const joinDate = new Date(crew.currentCycleStart);
+    const day = joinDate.getDay();            // 0=Sun … 6=Sat
+    const daysToSat = day === 6
+      ? 0
+      : (6 - day + 7) % 7;                          // days until next Saturday
 
-    // Calculate week number (1-based), counting the first week containing cycleStart as week 1
-    const wk = differenceInCalendarWeeks(adjustedWeekStart, adjustedCycleStart, { weekStartsOn: 6 }) +1;
+    const adjustedCycleStart = new Date(joinDate);
+    adjustedCycleStart.setDate(joinDate.getDate() + daysToSat);
+
+    // normalize the weekStart (it’s already a Saturday)
+    const adjustedWeekStart = startOfWeek(
+      new Date(weekStart),
+      { weekStartsOn: 6 }
+    );
+
+    const wk = differenceInCalendarWeeks(
+      adjustedWeekStart,
+      adjustedCycleStart,
+      { weekStartsOn: 6 }
+    ) + 1;
 
     const maxCycle = crew.cycleLengthWeeks;
 
@@ -470,8 +485,8 @@ export default function BoatScheduling() {
                                     })
                                     // 3️⃣ eligible starting on the Saturday on/after currentCycleStart
                                       .filter(c => {
-                                        const joinDate = new Date(c.currentCycleStart);
-                                        const day = joinDate.getDay();       // 0 = Sun … 6 = Sat
+                                        // const joinDate = new Date(c.currentCycleStart);
+                                        // const day = joinDate.getDay();       // 0 = Sun … 6 = Sat
 
                                         const daysToSat = (day === 6)
                                           ? 0
