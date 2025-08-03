@@ -103,6 +103,23 @@ export default function BoatScheduling() {
     });
   }, [tripDate]);
 
+  // Helper function to calculate the first eligible Saturday for a crew member
+  const getFirstEligibleSaturday = (cycleStartDate) => {
+    const startDate = typeof cycleStartDate === 'string' ? parseISO(cycleStartDate) : cycleStartDate;
+    const startDay = startDate.getDay(); // 0=Sun, 6=Sat
+    
+    if (startDay === 6) {
+      // If started on Saturday, that's the first eligible Saturday
+      return startDate;
+    } else {
+      // If started on another day, first eligible Saturday is the next Saturday
+      const daysUntilSaturday = (6 - startDay + 7) % 7;
+      const firstSaturday = new Date(startDate);
+      firstSaturday.setDate(startDate.getDate() + daysUntilSaturday);
+      return firstSaturday;
+    }
+  };
+
   const handleSelect = async (boatId, position, weekStart, crewId) => {
     // find the crew record
     const crew = crewList.find((c) => String(c._id) === String(crewId));
@@ -111,127 +128,57 @@ export default function BoatScheduling() {
     let finalCycleLength = 0;
 
     if (crewId && crew) {
-      try {
-        // Validate currentCycleStart exists and is a string
-        const cycleStartStr = crew.currentCycleStart;
-        if (!cycleStartStr || typeof cycleStartStr !== 'string') {
-          console.warn(`Invalid currentCycleStart for crew ${crew.firstName} ${crew.lastName}:`, cycleStartStr);
-          return; // Exit early
-        }
+      // Get the first eligible Saturday for this crew member
+      const firstEligibleSat = getFirstEligibleSaturday(crew.currentCycleStart);
+      const weekStartDate = parseISO(weekStart);
+      
+      // Calculate weeks from the first eligible Saturday
+      const wk = differenceInCalendarWeeks(weekStartDate, firstEligibleSat, {
+        weekStartsOn: 6,
+      }) + 1;
 
-        // Validate date format (YYYY-MM-DD)
-        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-        if (!dateRegex.test(cycleStartStr)) {
-          console.warn(`Invalid date format for crew ${crew.firstName} ${crew.lastName}:`, cycleStartStr);
-          return; // Exit early
-        }
+      const maxCycle = crew.cycleLengthWeeks;
 
-        // Parse crew's cycle start date properly to avoid timezone issues
-        const [year, month, day] = cycleStartStr.split('-').map(Number);
-        
-        // Validate parsed values
-        if (isNaN(year) || isNaN(month) || isNaN(day)) {
-          console.warn(`Invalid date components for crew ${crew.firstName} ${crew.lastName}:`, { year, month, day });
-          return; // Exit early
-        }
+      // Check if they were scheduled last week on any boat
+      const prev = new Date(weekStart);
+      prev.setDate(prev.getDate() - 7);
+      const prevKey = prev.toISOString().slice(0,10);
+      const scheduledLastWeek = Object.values(slots[prevKey] || {})
+        .flatMap(b => Object.values(b))
+        .some(s => String(s.crewId) === String(crewId));
+      
+      if (wk > maxCycle && !scheduledLastWeek) {
+        // --- MISSED one week after finishing cycle ⇒ auto reset ---
+        // 1) Persist new cycle start
+        await updateCrew({ ...crew, currentCycleStart: weekStart });
+        // 2) Refresh your local crewList so future clicks use updated start
+        const refreshed = await getCrew();
+        setCrewList(refreshed);
 
-        const startDate = new Date(year, month - 1, day); // month is 0-indexed
-        
-        // Validate the created date is valid
-        if (isNaN(startDate.getTime())) {
-          console.warn(`Invalid date created for crew ${crew.firstName} ${crew.lastName}:`, startDate);
-          return; // Exit early
-        }
-
-        const startDay = startDate.getDay(); // 0=Sun, 6=Sat
-        
-        let cycleStartSaturday;
-        if (startDay === 6) {
-          // If started on Saturday, that's the cycle start
-          cycleStartSaturday = cycleStartStr;
-        } else {
-          // If started on another day, cycle starts next Saturday
-          const daysUntilSaturday = (6 - startDay + 7) % 7;
-          const nextSat = new Date(year, month - 1, day + daysUntilSaturday);
-          
-          // Validate the calculated date
-          if (isNaN(nextSat.getTime())) {
-            console.warn(`Invalid calculated Saturday for crew ${crew.firstName} ${crew.lastName}:`, nextSat);
-            return; // Exit early
-          }
-          
-          cycleStartSaturday = nextSat.toISOString().slice(0, 10);
-        }
-        
-        // Parse both dates properly for week calculation
-        const [csYear, csMonth, csDay] = cycleStartSaturday.split('-').map(Number);
-        const [wsYear, wsMonth, wsDay] = weekStart.split('-').map(Number);
-        
-        // Validate parsed week start values
-        if (isNaN(wsYear) || isNaN(wsMonth) || isNaN(wsDay)) {
-          console.warn(`Invalid weekStart format:`, weekStart);
-          return; // Exit early
-        }
-        
-        const cycleStartDate = new Date(csYear, csMonth - 1, csDay);
-        const weekStartDate = new Date(wsYear, wsMonth - 1, wsDay);
-        
-        // Validate both dates
-        if (isNaN(cycleStartDate.getTime()) || isNaN(weekStartDate.getTime())) {
-          console.warn(`Invalid dates created:`, { cycleStartDate, weekStartDate });
-          return; // Exit early
-        }
-        
-        // Calculate the difference in days and convert to weeks
-        const diffInDays = Math.floor((weekStartDate - cycleStartDate) / (1000 * 60 * 60 * 24));
-        const wk = Math.floor(diffInDays / 7) + 1;
-
-        const maxCycle = crew.cycleLengthWeeks;
-
-        // 👇 figure out if they were scheduled *last* week on *any* boat
-        const prev = new Date(weekStart);
-        prev.setDate(prev.getDate() - 7);
-        const prevKey = prev.toISOString().slice(0,10);
-        const scheduledLastWeek = Object.values(slots[prevKey] || {})
-          .flatMap(b => Object.values(b))
-          .some(s => String(s.crewId) === String(crewId));
-        if (wk > maxCycle && !scheduledLastWeek) {
-          // --- MISSED one week after finishing cycle ⇒ auto reset ---
-          // 1) Persist new cycle start
+        finalWeek = 1;
+        finalCycleLength = maxCycle;
+      }
+      else if (wk > maxCycle) {
+        window.alert(
+          `⚠️ ${crew.firstName} ${crew.lastName} is over their cycle limit!\n` +
+          `Week: ${wk}, Cycle length: ${maxCycle}`
+        );
+        const doReset = window.confirm(
+          `Reset ${crew.firstName}'s cycle to start on ${weekStart}?`
+        );
+        if (doReset) {
           await updateCrew({ ...crew, currentCycleStart: weekStart });
-          // 2) Refresh your local crewList so future clicks use updated start
           const refreshed = await getCrew();
           setCrewList(refreshed);
-
           finalWeek = 1;
           finalCycleLength = maxCycle;
-        }
-        else if (wk > maxCycle) {
-          window.alert(
-            `⚠️ ${crew.firstName} ${crew.lastName} is over their cycle limit!\n` +
-            `Week: ${wk}, Cycle length: ${maxCycle}`
-          );
-          const doReset = window.confirm(
-            `Reset ${crew.firstName}'s cycle to start on ${weekStart}?`
-          );
-          if (doReset) {
-            await updateCrew({ ...crew, currentCycleStart: weekStart });
-            const refreshed = await getCrew();
-            setCrewList(refreshed);
-            finalWeek = 1;
-            finalCycleLength = maxCycle;
-          } else {
-            finalWeek = wk;
-            finalCycleLength = maxCycle;
-          }
         } else {
           finalWeek = wk;
           finalCycleLength = maxCycle;
         }
-        
-      } catch (error) {
-        console.error(`Error processing crew selection for ${crew.firstName} ${crew.lastName}:`, error);
-        return; // Exit early on any error
+      } else {
+        finalWeek = wk;
+        finalCycleLength = maxCycle;
       }
     }
 
@@ -260,15 +207,29 @@ export default function BoatScheduling() {
     });
   };
 
-  const handleResetCycle = (boatId, position, weekStart) => {
+  const handleResetCycle = async (boatId, position, weekStart) => {
+    const cell = slots[weekStart]?.[boatId]?.[position];
+    if (!cell || !cell.crewId) return;
+
+    // Find the crew member
+    const crew = crewList.find((c) => String(c._id) === String(cell.crewId));
+    if (!crew) return;
+
+    // Update the crew member's cycle start date
+    await updateCrew({ ...crew, currentCycleStart: weekStart });
+    
+    // Refresh crew list
+    const refreshed = await getCrew();
+    setCrewList(refreshed);
+
+    // Update the slots
     setSlots((prev) => {
       const weeks = { ...prev };
-      const cell = { ...weeks[weekStart][boatId][position] };
-      // reset their cycle: start at this week => week becomes 1
-      cell.week = 1;
-      cell.overByOne = false;
-      // you could also call your crewService.updateCrew here
-      weeks[weekStart][boatId][position] = cell;
+      const updatedCell = { ...weeks[weekStart][boatId][position] };
+      updatedCell.week = 1;
+      updatedCell.cycleCount = `1/${updatedCell.cycleLength}`;
+      updatedCell.overByOne = false;
+      weeks[weekStart][boatId][position] = updatedCell;
       return weeks;
     });
   };
@@ -423,7 +384,7 @@ export default function BoatScheduling() {
           onClick={() => setTripDate((d) => subWeeks(d, 1))}
           className="absolute left-0 top-1/2 transform -translate-x-full -translate-y-1/2 text-4xl text-gray-600 hover:text-gray-800 z-10"
         >
-          ◀
+          ◀️
         </button>
 
         {/* Week panels */}
@@ -486,9 +447,9 @@ export default function BoatScheduling() {
                                     // bail out if not editing or in a past week
                                     if (!editing || isPast) return;
 
-                                    if (cell.overByOne) {
+                                    if (isOver) {
                                       const ok = window.confirm(
-                                        `⚠️ ${cell.name} is more than one week over their cycle.\n\n` +
+                                        `⚠️ ${cell.name} is over their cycle.\n\n` +
                                           `Current: ${cell.week}/${cell.cycleLength}\n\n` +
                                           `Reset their cycle to start here?`
                                       );
@@ -535,67 +496,11 @@ export default function BoatScheduling() {
                                     })
                                     // 3️⃣ joined by first eligible Saturday?
                                     .filter((c) => {
-                                      try {
-                                        // Validate currentCycleStart exists and is a string
-                                        const cycleStartStr = c.currentCycleStart;
-                                        if (!cycleStartStr || typeof cycleStartStr !== 'string') {
-                                          console.warn(`Invalid currentCycleStart for crew ${c.firstName} ${c.lastName}:`, cycleStartStr);
-                                          return false; // Skip this crew member
-                                        }
-
-                                        // Validate date format (YYYY-MM-DD)
-                                        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-                                        if (!dateRegex.test(cycleStartStr)) {
-                                          console.warn(`Invalid date format for crew ${c.firstName} ${c.lastName}:`, cycleStartStr);
-                                          return false;
-                                        }
-
-                                        // Parse the cycle start date string (YYYY-MM-DD format)
-                                        const [year, month, day] = cycleStartStr.split('-').map(Number);
-                                        
-                                        // Validate parsed values
-                                        if (isNaN(year) || isNaN(month) || isNaN(day)) {
-                                          console.warn(`Invalid date components for crew ${c.firstName} ${c.lastName}:`, { year, month, day });
-                                          return false;
-                                        }
-
-                                        // Create date object (month is 0-indexed in JavaScript)
-                                        const joinDate = new Date(year, month - 1, day);
-                                        
-                                        // Validate the created date is valid
-                                        if (isNaN(joinDate.getTime())) {
-                                          console.warn(`Invalid date created for crew ${c.firstName} ${c.lastName}:`, joinDate);
-                                          return false;
-                                        }
-
-                                        const joinDay = joinDate.getDay(); // 0=Sun, 6=Sat
-                                        
-                                        let firstEligibleSaturday;
-                                        
-                                        if (joinDay === 6) {
-                                          // If joined on Saturday, can start that same Saturday
-                                          firstEligibleSaturday = cycleStartStr;
-                                        } else {
-                                          // If joined on any other day, calculate next Saturday
-                                          const daysUntilSaturday = (6 - joinDay + 7) % 7;
-                                          const nextSat = new Date(year, month - 1, day + daysUntilSaturday);
-                                          
-                                          // Validate the calculated date
-                                          if (isNaN(nextSat.getTime())) {
-                                            console.warn(`Invalid calculated Saturday for crew ${c.firstName} ${c.lastName}:`, nextSat);
-                                            return false;
-                                          }
-                                          
-                                          firstEligibleSaturday = nextSat.toISOString().slice(0, 10);
-                                        }
-                                        
-                                        // Compare date strings directly
-                                        return ds >= firstEligibleSaturday;
-                                        
-                                      } catch (error) {
-                                        console.error(`Error processing crew ${c.firstName} ${c.lastName}:`, error);
-                                        return false; // Skip this crew member if any error occurs
-                                      }
+                                      const firstEligibleSat = getFirstEligibleSaturday(c.currentCycleStart);
+                                      const weekDate = new Date(ds);
+                                      
+                                      // Check if the current week date is on or after the first eligible Saturday
+                                      return weekDate >= firstEligibleSat;
                                     })
                                     // 4️⃣ not already assigned this week?
                                     .filter(
@@ -651,7 +556,7 @@ export default function BoatScheduling() {
           onClick={() => setTripDate((d) => addWeeks(d, 1))}
           className="absolute right-0 top-1/2 transform translate-x-full -translate-y-1/2 text-4xl text-gray-600 hover:text-gray-800 z-10"
         >
-          ▶
+          ▶️
         </button>
       </div>
     </div>
